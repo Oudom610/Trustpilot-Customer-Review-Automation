@@ -1,0 +1,977 @@
+{
+  "name": "Official Customer Review Intelligence",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "8a2edbd9-ccbd-4de9-9b6a-6f4707dd0281",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [
+        -3560,
+        -155
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "company_domain",
+              "type": "string",
+              "value": "mexipass.com",
+              "id": "6a392027-817c-4086-886c-c71070ba7b87"
+            },
+            {
+              "name": "days_back",
+              "type": "number",
+              "value": 30,
+              "id": "12e77f58-3ac5-44fb-83f0-5960740d39a7"
+            },
+            {
+              "name": "cutoff_date",
+              "type": "string",
+              "value": "={{ DateTime.now().minus({days: 30}).toFormat('yyyy-MM-dd') }}",
+              "id": "c9302254-df1f-455a-9772-2c2d4aa8a26c"
+            },
+            {
+              "name": "batch_size",
+              "type": "number",
+              "value": 10,
+              "id": "8cad865b-f1ce-4f36-b5fe-a8e4b10450c5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e396e1af-097c-424d-9ced-16be8176db98",
+      "name": "Set Configuration",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -3340,
+        -155
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "batchSize": "={{ $('Set Configuration').item.json.batch_size }}",
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "2957c2c9-4eda-4e64-99b1-6546e41ebe24",
+      "name": "Batch Processor",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [
+        -2240,
+        -5
+      ],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "url": "=https://www.trustpilot.com{{ $json.review_links }}",
+        "options": {}
+      },
+      "id": "68d76573-41ad-4e66-890d-fed7ef8af406",
+      "name": "Get Individual Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -2020,
+        -5
+      ],
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "review_html",
+              "cssSelector": "article"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e812d08a-4514-41f2-9349-c329fab9ee17",
+      "name": "Extract Review Content",
+      "type": "n8n-nodes-base.html",
+      "position": [
+        -1800,
+        -5
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "text": "=You need to extract review information from: {{ $json.review_html }}",
+        "attributes": {
+          "attributes": [
+            {
+              "name": "author",
+              "description": "Review author name",
+              "required": true
+            },
+            {
+              "name": "rating",
+              "type": "number",
+              "description": "Rating from 1-5 stars",
+              "required": true
+            },
+            {
+              "name": "date",
+              "description": "Review date in YYYY-MM-DD format",
+              "required": true
+            },
+            {
+              "name": "title",
+              "description": "Review title",
+              "required": true
+            },
+            {
+              "name": "text",
+              "description": "Full review text content",
+              "required": true
+            },
+            {
+              "name": "country",
+              "description": "Reviewer country (2 letters)",
+              "required": true
+            }
+          ]
+        },
+        "options": {
+          "systemPromptTemplate": "=Extract only the required information from the review HTML. Be precise and accurate.\n\nCRITICAL: For the date field, extract ONLY the date that appears after \"Date of experience:\" in the HTML. This will be in the format \"Month DD, YYYY\" - convert this to YYYY-MM-DD format but preserve the exact year, month, and day as written.\n\nIGNORE all other time references in the HTML such as:\n- \"X minutes ago\" \n- \"X hours ago\"\n- \"An hour ago\"\n- Any timestamps in replies\n\nLook specifically for the text \"Date of experience:\" and extract only the date that immediately follows it. Do not modify or interpret the date - if it says \"July 04, 2025\" then output \"2025-07-04\"."
+        }
+      },
+      "id": "99ffea96-be86-4870-afde-c285d90b58e3",
+      "name": "Extract Review Data",
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "position": [
+        -1580,
+        -5
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "id": "4bc09452-8e5c-49a0-ae05-a9735f7f4deb",
+      "name": "Rate Limit Wait",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        -1204,
+        220
+      ],
+      "typeVersion": 1.1,
+      "webhookId": "4d9310d2-d2c1-4587-8daf-ec7dd8237571"
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-2.0-flash-001",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "11733390-0c0b-4664-a730-3561d003e2d3",
+      "name": "OpenRouter Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "position": [
+        -676,
+        -260
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "openRouterApi": {
+          "id": "teJYKmaKqJ5aaek9",
+          "name": "Thesis JSON Context"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-2.0-flash-001",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -1492,
+        215
+      ],
+      "id": "d0972334-c2fc-415c-8247-2de7edce11d6",
+      "name": "OpenRouter Chat Model1",
+      "credentials": {
+        "openRouterApi": {
+          "id": "teJYKmaKqJ5aaek9",
+          "name": "Thesis JSON Context"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a Senior Business Intelligence Director and Customer Experience Strategist with 15+ years of experience analyzing customer feedback for Fortune 500 companies. Your expertise spans sentiment analysis, competitive intelligence, operational optimization, and strategic business consulting.\n\nCRITICAL CONTEXT: These are third-party Trustpilot reviews that customers posted independently. You CANNOT and should NOT recommend anything related to:\n- Modifying review content, titles, or submission processes\n- Influencing how customers write reviews\n- Changing anything on the Trustpilot platform\n- Review solicitation or management strategies\n\nFOCUS ONLY ON: Internal business operations, service delivery, staff training, process improvements, and strategic decisions that can be informed by these public reviews.\n\nAnalyze these {{ $json.data.length }} Trustpilot reviews from the last 30 days and provide comprehensive insights:\n\nREVIEWS DATA:\n{{ JSON.stringify($json, null, 2) }}\n\nProvide analysis in this EXACT format:\n\n**SENTIMENT ANALYSIS:**\nOverall sentiment: [Positive/Mixed/Negative] with [brief description of dominant themes]\nReview Volume: Based on {{ $json.data.length }} reviews\n\n**TOPIC EXTRACTION:**\nList of what customers talk about most (ranked from most to least mentioned):\n- [Topic 1] \n- [Topic 2] \n- [Topic 3] \n\n**OPERATIONAL INSIGHTS:**\nTop 3 problems to fix based on customer reviews:\n1. [Severity Level]: [Issue 1] \n2. [Severity Level]: [Issue 2] \n3. [Severity Level]: [Issue 3]  \n*Note: If insufficient negative feedback exists, identify improvement opportunities from positive feedback patterns or service gaps.*\n\n**COMPETITIVE INTELLIGENCE:**\n[Dynamic summary based on what competitors are mentioned and what switching/comparison patterns emerge from the reviews]\n*Note: If no competitive mentions found, state \"No direct competitive references identified in reviews.\"*\n\n**RECOMMENDED ACTIONS:**\n- **Priority 1**: [ONE SINGLE specific action based on highest priority findings]\n- **Priority 2**: [ONE SINGLE action based on second highest priority findings]  \n- **Priority 3**: [ONE SINGLE action based on third highest priority findings]\n*Note: Focus EXCLUSIVELY on internal business improvements that can be informed by customer sentiment. Do not recommend actions that attempt to influence or modify the review platform or customer review behavior.*\n\nBe specific, data-driven, and actionable in your analysis focusing on business improvements the company can control. If certain sections lack sufficient data, acknowledge this limitation while providing insights based on available information.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        -764,
+        -480
+      ],
+      "id": "ec45f072-1590-420e-9355-96806fe7c5ea",
+      "name": "Comprehensive Analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Retrieve the global static data container\nconst staticData = $getWorkflowStaticData('global');\n\n// Access the array of all accumulated reviews\nconst allReviews = staticData.allReviews;\n\n// ❗ Check if allReviews exists and is an array before using .map()\nif (allReviews && Array.isArray(allReviews)) {\n  // You can now safely use the 'allReviews' array\n  return {\n    data: allReviews.map(review => {\n      // Destructure the review object to exclude 'batch_info'\n      // and collect the rest of the properties using rest syntax\n      const { batch_info, ...restOfReview } = review;\n\n      // Return the review without 'batch_info', wrapped in 'json'\n      return { json: restOfReview };\n    })\n  };\n}\n\n// Return an empty array or an appropriate message if no reviews were found\nreturn {\n  data: [{\n    json: {\n      message: \"No reviews found in staticData.\"\n    }\n  }]\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -984,
+        -155
+      ],
+      "id": "9ff5af67-f94a-44e0-a398-7524059e71e8",
+      "name": "Aggregate Reviews"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1TIT1f6eFAqheGByWk3yR81iQ46RnLDAMY4i_jL8XIas",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "=gid=0",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "analysis_date",
+              "displayName": "analysis_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "period",
+              "displayName": "period",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total_reviews_analyzed",
+              "displayName": "total_reviews_analyzed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment_analysis",
+              "displayName": "sentiment_analysis",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "topic_extraction",
+              "displayName": "topic_extraction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "operational_insights",
+              "displayName": "operational_insights",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "competitive_intelligence",
+              "displayName": "competitive_intelligence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recommended_actions",
+              "displayName": "recommended_actions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "useAppend": true
+        }
+      },
+      "id": "4ec2292d-b700-47bd-b55e-73bf0eee3c79",
+      "name": "Save Analysis to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        -168,
+        -380
+      ],
+      "typeVersion": 4.6,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "OexdA7gVlK8ytxMG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the AI analysis output directly\nconst rawAnalysis = $input.first().json.output;\n\n// Function to clean text formatting\nfunction cleanText(text) {\n  return text\n    .replace(/\\*\\*\\*(.*?)\\*\\*\\*/g, '$1')\n    .replace(/\\*\\*(.*?)\\*\\*/g, '$1')\n    .replace(/\\*(.*?)\\*/g, '$1')\n    .replace(/##\\s/g, '')\n    .replace(/###\\s/g, '')\n    .replace(/####\\s/g, '')\n    .replace(/^- /gm, '• ')\n    .replace(/\\n\\n+/g, '\\n')  // First clean up multiple line breaks\n    .replace(/\\n/g, '\\n\\n')   // Then add double spacing\n    .trim();\n}\n\n// Function to extract section by header\nfunction extractSection(text, sectionHeader) {\n  // Match the actual format: **SECTION:** followed by content until next **SECTION:** or end\n  const regex = new RegExp(`\\\\*\\\\*${sectionHeader}:\\\\*\\\\*(.*?)(?=\\\\*\\\\*[A-Z][A-Z\\\\s]+:\\\\*\\\\*|$)`, 'is');\n  const match = text.match(regex);\n  \n  // Special handling for the last section (RECOMMENDED ACTIONS) to ensure we get all content\n  if (sectionHeader === \"RECOMMENDED ACTIONS\" && match) {\n    // For the last section, just take everything after the header\n    const startIndex = text.indexOf(`**${sectionHeader}:**`) + `**${sectionHeader}:**`.length;\n    const content = text.substring(startIndex).trim();\n    return cleanText(content);\n  }\n  \n  return match ? cleanText(match[1]) : '';\n}\n\n// Extract each section from the AI analysis\nconst sentimentAnalysis = extractSection(rawAnalysis, 'SENTIMENT ANALYSIS');\nconst topicExtraction = extractSection(rawAnalysis, 'TOPIC EXTRACTION');\nconst operationalInsights = extractSection(rawAnalysis, 'OPERATIONAL INSIGHTS');\nconst competitiveIntelligence = extractSection(rawAnalysis, 'COMPETITIVE INTELLIGENCE');\nconst recommendedActions = extractSection(rawAnalysis, 'RECOMMENDED ACTIONS');\n\n// Get configuration values from the Set Configuration node\nconst configNode = $('Set Configuration').first().json;\n\nconst totalReviews = $getWorkflowStaticData('global').allReviews ? $getWorkflowStaticData('global').allReviews.length : 0;\n\n// Create formatted output for Google Sheets\nreturn [{\n  json: {\n    company: configNode.company_domain,\n    analysis_date: new Date().toLocaleDateString('en-GB'), // DD-MM-YYYY format\n    period: \"Last 30 Days\", \n    total_reviews_analyzed: totalReviews,\n    sentiment_analysis: sentimentAnalysis,\n    topic_extraction: topicExtraction,\n    operational_insights: operationalInsights,\n    competitive_intelligence: competitiveIntelligence,\n    recommended_actions: recommendedActions\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -388,
+        -380
+      ],
+      "id": "77015c65-465a-4b4d-afcd-970127769379",
+      "name": "Format Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Trigger the final analysis by outputting a signal\n// This node is triggered by Batch Processor's \"done\" output\nconst staticData = $getWorkflowStaticData('global');\n\n// Just return a trigger signal - the actual data reading happens in \"Aggregate Reviews\"\nreturn [{\n  json: {\n    trigger: \"final_analysis\",\n    timestamp: new Date().toISOString(),\n    total_reviews_accumulated: staticData.allReviews ? staticData.allReviews.length : 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1204,
+        -280
+      ],
+      "id": "c380eecc-a934-4f93-b317-16f448c15c62",
+      "name": "Trigger Final Analysis"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "review_links",
+        "options": {}
+      },
+      "id": "2a234cba-cc18-474e-a1a5-9667a645135a",
+      "name": "Split Review Links",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [
+        -2460,
+        -55
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "// This starts the loop on page 1 and creates an empty array to hold our links.\nconst staticData = $getWorkflowStaticData('global');\nstaticData.reviewLinks = [];\n\nreturn [{\n  json: {\n    \"page\": 1,\n    \"continueScraping\": true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3120,
+        -155
+      ],
+      "id": "b3013883-49b2-4807-8a1f-e42e833bc3e5",
+      "name": "Initialize Loop"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f0ba609c-245b-410c-83f9-474761bb974e",
+              "leftValue": "={{ $json.continueScraping }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2900,
+        -155
+      ],
+      "id": "757f433b-12ef-4ce0-a517-b873ab2eee23",
+      "name": "Continue Scraping?"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.trustpilot.com/review/{{ $('Set Configuration').item.json.company_domain }}?page={{ $json.page }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2680,
+        -255
+      ],
+      "id": "09cdd8f6-2f34-4471-bc5d-e512c91ed16e",
+      "name": "Scrape Single Page",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const node = $('Extract Dates & Links').item.json;\nconst links = node.links;\nconst dates = node.dates;\nconst currentPage = $('Continue Scraping?').item.json.page;\nconst cutoffDate = DateTime.fromISO($('Set Configuration').item.json.cutoff_date);\nconst staticData = $getWorkflowStaticData('global');\n\nlet recentReviewsOnPage = 0;\n\n// Loop through all reviews found on the current page\nfor (let i = 0; i < dates.length; i++) {\n  const dateText = dates[i];\n  \n  // Parse absolute dates like 'July 02, 2025'\n  const reviewDate = DateTime.fromFormat(dateText, 'LLLL dd, yyyy');\n  \n  // If the review is recent, add its link to our master list\n  if (reviewDate.isValid && reviewDate >= cutoffDate) {\n    recentReviewsOnPage++;\n    if (links[i]) {\n      staticData.reviewLinks.push(links[i]);\n    }\n  }\n}\n\n// If no recent reviews were found on this page, we stop. Otherwise, we continue.\nconst continueScraping = recentReviewsOnPage > 0;\n\n// Output data for the next loop iteration\nreturn [{\n  json: {\n    \"page\": currentPage + 1,\n    \"continueScraping\": continueScraping,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2240,
+        -205
+      ],
+      "id": "754a83f0-b929-4dcd-baf9-1f42dc0affd9",
+      "name": "Check Dates and Collect Links"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst allLinks = staticData.reviewLinks || [];\n\n// Remove duplicate links, just in case\nconst uniqueLinks = [...new Set(allLinks)];\n\n// Return links in a format that can be split\nreturn uniqueLinks.map(link => ({\n  json: {\n    review_links: link\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2680,
+        -55
+      ],
+      "id": "b16f6b42-3e18-474d-80d9-d813cc70165c",
+      "name": "Get All Links"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "links",
+              "cssSelector": "article section a",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            },
+            {
+              "key": "dates",
+              "cssSelector": "article section p span",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "414015ea-9863-40ca-a753-a993d28dbd28",
+      "name": "Extract Dates & Links",
+      "type": "n8n-nodes-base.html",
+      "position": [
+        -2460,
+        -255
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Silently accumulate reviews without any output\nconst staticData = $getWorkflowStaticData('global');\n\nif (!staticData.allReviews) {\n  staticData.allReviews = [];\n}\n\n// Add current batch's filtered reviews to accumulated array\nif (items && items.length > 0) {\n  items.forEach(item => {\n    staticData.allReviews.push({\n      ...item.json.output, // Extract the review data from the LLM output\n      batch_info: {\n        batch_number: Math.floor(staticData.allReviews.length / $('Set Configuration').item.json.batch_size) + 1,\n        processed_at: new Date().toISOString()\n      }\n    });\n  });\n}\n\n// Return empty array - no output connections\nreturn [];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1204,
+        -55
+      ],
+      "id": "97363045-9a52-4bbf-9fe7-7de1954c4de5",
+      "name": "Accumulate Reviews Silently"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the aggregated reviews data\nconst aggregatedData = $input.first().json.data;\n\n// Format each review for Google Sheets (no redundant analysis_date)\nconst formattedReviews = aggregatedData.map(item => ({\n  json: {\n    author: item.json.author,\n    rating: item.json.rating,\n    review_date: item.json.date,\n    title: item.json.title,\n    text: item.json.text,\n    country: item.json.country\n  }\n}));\n\nreturn formattedReviews;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -686,
+        -30
+      ],
+      "id": "b7762445-272a-4372-8c52-29e8d90ffde3",
+      "name": "Format Raw Data for Sheets"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1TIT1f6eFAqheGByWk3yR81iQ46RnLDAMY4i_jL8XIas",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ \"Raw Data - \" + new Date().toLocaleDateString('en-GB') }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "spreadsheetId",
+              "displayName": "spreadsheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sheetId",
+              "displayName": "sheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "index",
+              "displayName": "index",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sheetType",
+              "displayName": "sheetType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "gridProperties",
+              "displayName": "gridProperties",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "useAppend": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -388,
+        70
+      ],
+      "id": "7e85af25-757b-45fc-883e-396618c85daa",
+      "name": "Save Raw Review",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "OexdA7gVlK8ytxMG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "value": "1TIT1f6eFAqheGByWk3yR81iQ46RnLDAMY4i_jL8XIas",
+          "mode": "id"
+        },
+        "title": "={{ \"Raw Data - \" + new Date().toLocaleDateString('en-GB') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -388,
+        -130
+      ],
+      "id": "11c9c100-09f1-45ba-b168-a7e4774d0495",
+      "name": "Create New Sheets for Raw Review",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "OexdA7gVlK8ytxMG",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Set Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Configuration": {
+      "main": [
+        [
+          {
+            "node": "Initialize Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Processor": {
+      "main": [
+        [
+          {
+            "node": "Trigger Final Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Individual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Individual Review": {
+      "main": [
+        [
+          {
+            "node": "Extract Review Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Review Content": {
+      "main": [
+        [
+          {
+            "node": "Extract Review Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Review Data": {
+      "main": [
+        [
+          {
+            "node": "Accumulate Reviews Silently",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Wait": {
+      "main": [
+        [
+          {
+            "node": "Batch Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Comprehensive Analysis",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract Review Data",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comprehensive Analysis": {
+      "main": [
+        [
+          {
+            "node": "Format Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Reviews": {
+      "main": [
+        [
+          {
+            "node": "Format Raw Data for Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Comprehensive Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Data": {
+      "main": [
+        [
+          {
+            "node": "Save Analysis to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Final Analysis": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Review Links": {
+      "main": [
+        [
+          {
+            "node": "Batch Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Loop": {
+      "main": [
+        [
+          {
+            "node": "Continue Scraping?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue Scraping?": {
+      "main": [
+        [
+          {
+            "node": "Scrape Single Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get All Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Single Page": {
+      "main": [
+        [
+          {
+            "node": "Extract Dates & Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Dates and Collect Links": {
+      "main": [
+        [
+          {
+            "node": "Continue Scraping?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Links": {
+      "main": [
+        [
+          {
+            "node": "Split Review Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Dates & Links": {
+      "main": [
+        [
+          {
+            "node": "Check Dates and Collect Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accumulate Reviews Silently": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Raw Data for Sheets": {
+      "main": [
+        [
+          {
+            "node": "Create New Sheets for Raw Review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Raw Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create New Sheets for Raw Review": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f13be9ad-b3d4-480b-8d75-31d51473753a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "558d88703fb65b2d0e44613bc35916258b0f0bf983c5d4730c00c424b77ca36a"
+  },
+  "id": "Hbbp8KGrOmj11WIy",
+  "tags": []
+}
